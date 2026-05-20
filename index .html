@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Kabana Village - Cadastral Parcels Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    #map { height: 100vh; width: 100%; }
+
+    /* Legend */
+    .legend {
+      background: white;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      font-size: 13px;
+      line-height: 24px;
+    }
+    .legend h4 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      font-weight: bold;
+      color: #333;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      border: 1px solid #999;
+    }
+
+    /* Title box */
+    .map-title {
+      background: white;
+      padding: 8px 14px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      font-size: 15px;
+      font-weight: bold;
+      color: #222;
+    }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script>
+
+  // ── 1. Initialize map centered on Kabana Village ──
+  var map = L.map('map').setView([-1.8885, 29.8456], 15);
+
+  // ── 2. Base map (OpenStreetMap) ──
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+    maxZoom: 19
+  }).addTo(map);
+
+  // ── 3. Color function based on Land Use ──
+  function getColor(landuse) {
+    switch(landuse) {
+      case 'Residential':  return '#8B4513';  // Brown
+      case 'Agricultural': return '#228B22';  // Green
+      case 'Commercial':   return '#FF0000';  // Red
+      default:             return '#808080';  // Gray
+    }
+  }
+
+  // ── 4. Style function ──
+  function style(feature) {
+    return {
+      fillColor:   getColor(feature.properties.Landuse),
+      fillOpacity: 0.6,
+      color:       '#ffffff',
+      weight:      0.8,
+      opacity:     1
+    };
+  }
+
+  // ── 5. Highlight on hover ──
+  function highlightFeature(e) {
+    var layer = e.target;
+    layer.setStyle({
+      weight: 2,
+      color: '#ffff00',
+      fillOpacity: 0.9
+    });
+    layer.bringToFront();
+  }
+
+  function resetHighlight(e) {
+    geojsonLayer.resetStyle(e.target);
+  }
+
+  // ── 6. Popup on click ──
+  function onEachFeature(feature, layer) {
+    var props = feature.properties;
+
+    // Format area to 2 decimal places
+    var area = props.Area ? parseFloat(props.Area).toFixed(2) : 'N/A';
+    var upi  = props.upi  ? props.upi : 'N/A';
+    var landuse = props.Landuse ? props.Landuse : 'N/A';
+
+    layer.bindPopup(
+      '<div style="font-family:Arial; font-size:13px; min-width:180px;">' +
+      '<h3 style="margin:0 0 8px 0; color:#333; border-bottom:2px solid #ccc; padding-bottom:4px;">📦 Parcel Info</h3>' +
+      '<b>UPI:</b> ' + upi + '<br>' +
+      '<b>Land Use:</b> ' + landuse + '<br>' +
+      '<b>Area:</b> ' + area + ' m²<br>' +
+      '<b>Village:</b> ' + (props.village || 'Kabana') + '<br>' +
+      '<b>Sector:</b> ' + (props.sector || 'N/A') +
+      '</div>'
+    );
+
+    layer.on({
+      mouseover: highlightFeature,
+      mouseout:  resetHighlight
+    });
+  }
+
+  // ── 7. Load GeoJSON file ──
+  var geojsonLayer;
+
+  fetch('parcels_final.geojson')
+    .then(function(response) {
+      if (!response.ok) throw new Error('GeoJSON file not found!');
+      return response.json();
+    })
+    .then(function(data) {
+      geojsonLayer = L.geoJSON(data, {
+        style: style,
+        onEachFeature: onEachFeature
+      }).addTo(map);
+
+      // Auto zoom to parcels extent
+      map.fitBounds(geojsonLayer.getBounds());
+    })
+    .catch(function(err) {
+      alert('Error loading GeoJSON: ' + err.message + '\nMake sure parcels_final.geojson is in the same folder as index.html');
+      console.error(err);
+    });
+
+  // ── 8. Add Title ──
+  var titleControl = L.control({ position: 'topleft' });
+  titleControl.onAdd = function() {
+    var div = L.DomUtil.create('div', 'map-title');
+    div.innerHTML = '🗺️ Kabana Village — Cadastral Parcels';
+    return div;
+  };
+  titleControl.addTo(map);
+
+  // ── 9. Add Legend ──
+  var legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function() {
+    var div = L.DomUtil.create('div', 'legend');
+    div.innerHTML =
+      '<h4>🏷️ Land Use</h4>' +
+      '<div class="legend-item"><div class="legend-color" style="background:#8B4513"></div> Residential</div>' +
+      '<div class="legend-item"><div class="legend-color" style="background:#228B22"></div> Agricultural</div>' +
+      '<div class="legend-item"><div class="legend-color" style="background:#FF0000"></div> Commercial</div>' +
+      '<div class="legend-item"><div class="legend-color" style="background:#808080"></div> Other</div>';
+    return div;
+  };
+  legend.addTo(map);
+
+</script>
+</body>
+</html>
